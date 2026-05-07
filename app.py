@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
+import json
 from datetime import datetime
 
-# --- CONFIGURATION ---
-st.set_page_config(page_title="My Smart Cart", page_icon="🛒", layout="wide")
+# --- CONFIG & SEASON LOGIC ---
+st.set_page_config(page_title="One-Click Cart Planner", layout="wide")
 
 def get_season():
     month = datetime.now().month
@@ -12,55 +13,50 @@ def get_season():
     if 10 <= month <= 11: return "Autumn"
     return "Winter"
 
-def clean_data(df):
-    # Automatically map common names to our required names
-    mapping = {
-        'product': 'name', 'title': 'name', 'item': 'name',
-        'cost': 'price', 'mrp': 'price', 'amount': 'price',
-        'off': 'discount', 'perc': 'discount'
-    }
-    df.columns = [c.lower() for c in df.columns]
-    df.rename(columns=mapping, inplace=True)
-    
-    # Fill in missing columns if they don't exist
-    if 'season' not in df.columns:
-        df['season'] = 'All' 
-    if 'site' not in df.columns:
-        df['site'] = 'Online Store'
-    if 'discount' not in df.columns:
-        df['discount'] = 0
+# --- SMART ENGINE ---
+def analyze_data(items, budget):
+    current_season = get_season()
+    buy, wait = [], []
+    items = sorted(items, key=lambda x: int(x.get('discount', 0)), reverse=True)
+    rem_budget = budget
+
+    for item in items:
+        price = int(item.get('price', 0))
+        # Simple auto-season detection
+        name_lower = item['name'].lower()
+        item_season = "Winter" if any(w in name_lower for w in ['sweater', 'jacket', 'wool']) else "Summer" if any(s in name_lower for s in ['t-shirt', 'shorts', 'cotton']) else "All"
         
-    return df
+        if price <= rem_budget and (item_season == current_season or item_season == "All"):
+            buy.append(item)
+            rem_budget -= price
+        else:
+            item['reason'] = "Exceeds Budget" if price > rem_budget else f"Wrong Season ({item_season})"
+            wait.append(item)
+    return buy, wait, rem_budget
+
 # --- UI ---
-st.title("🛒 My Personal Cart Planner")
-st.sidebar.header("Step 1: Set Budget")
-budget = st.sidebar.number_input("Your Budget (₹)", min_value=0, value=5000)
+st.title("🚀 One-Click Cart Planner")
 
-st.write("### Step 2: Upload your Cart CSV")
-uploaded_file = st.file_uploader("Upload the CSV file you exported from your cart", type=["csv"])
-
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
+# Get data from the Bookmarklet (sent via URL)
+query_params = st.query_params
+if "cart_data" in query_params:
+    raw_data = query_params["cart_data"]
+    cart_items = json.loads(raw_data)
     
-    # Check if CSV has right columns
-    required_columns = ['name', 'price', 'discount', 'season', 'site']
-    if all(col in df.columns for col in required_columns):
-        if st.button("Calculate Best Buys"):
-            buy_list, wait_list, balance = analyze_cart(df, budget)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.success(f"✅ Buy These (Remaining: ₹{balance})")
-                for item in buy_list:
-                    st.info(f"**{item['name']}** from {item['site']}\n\nPrice: ₹{item['price']} ({item['discount']}% off)")
-            
-            with col2:
-                st.warning("⏳ Wait on These")
-                for item in wait_list:
-                    with st.expander(f"{item['name']} (₹{item['price']})"):
-                        st.write(f"**Reason:** {item['reason']}")
-                        st.write("Suggested: Buy this during " + item['season'])
-    else:
-        st.error(f"Your CSV must have these headers: {', '.join(required_columns)}")
+    st.sidebar.success("✅ Cart Data Received!")
+    budget = st.sidebar.number_input("Set Budget (₹)", value=5000)
+    
+    buy_list, wait_list, balance = analyze_data(cart_items, budget)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("✅ Buy Now")
+        for item in buy_list:
+            st.info(f"**{item['name']}**\n\n₹{item['price']}")
+    with col2:
+        st.subheader("⏳ Wait")
+        for item in wait_list:
+            st.warning(f"**{item['name']}**\n\nReason: {item['reason']}")
 else:
-    st.info("Waiting for your cart file...")
+    st.info("👋 How to use: Drag the button below to your bookmarks, then click it when you are in your Amazon/Myntra cart!")
+    st.markdown('<a href="javascript:(function(){/*Script below goes here*/})()">Analyze My Cart</a>', unsafe_allow_html=True)
