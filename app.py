@@ -12,24 +12,25 @@ def get_season():
     if 10 <= month <= 11: return "Autumn"
     return "Winter"
 
-def analyze_cart(df, budget):
-    current_season = get_season()
-    buy, wait = [], []
-    # Sort by highest discount first
-    df = df.sort_values(by='discount', ascending=False)
-    rem_budget = budget
-
-    for _, item in df.iterrows():
-        if item['price'] <= rem_budget and (item['season'] == current_season or item['season'] == "All"):
-            buy.append(item)
-            rem_budget -= item['price']
-        else:
-            reason = "Exceeds Budget" if item['price'] > rem_budget else f"Off-season ({item['season']})"
-            item_dict = item.to_dict()
-            item_dict['reason'] = reason
-            wait.append(item_dict)
-    return buy, wait, rem_budget
-
+def clean_data(df):
+    # Automatically map common names to our required names
+    mapping = {
+        'product': 'name', 'title': 'name', 'item': 'name',
+        'cost': 'price', 'mrp': 'price', 'amount': 'price',
+        'off': 'discount', 'perc': 'discount'
+    }
+    df.columns = [c.lower() for c in df.columns]
+    df.rename(columns=mapping, inplace=True)
+    
+    # Fill in missing columns if they don't exist
+    if 'season' not in df.columns:
+        df['season'] = 'All' 
+    if 'site' not in df.columns:
+        df['site'] = 'Online Store'
+    if 'discount' not in df.columns:
+        df['discount'] = 0
+        
+    return df
 # --- UI ---
 st.title("🛒 My Personal Cart Planner")
 st.sidebar.header("Step 1: Set Budget")
