@@ -92,3 +92,11 @@ if "cart_data" in query_params:
 else:
     st.info("👋 To start, open your Amazon/Myntra cart and click your 'Smart Cart' Extension!")
     st.image("https://img.icons8.com/illustrations/external-tulpahn-outline-color-tulpahn/100/external-online-shopping-ecommerce-tulpahn-outline-color-tulpahn.png", width=200)
+with open("extension.zip", "rb") as fp:
+    btn = st.download_button(
+        label="📥 Download Chrome Extension to Start",
+        data=fp,
+        file_name="smart-cart-extension.zip",
+        mime="application/zip"
+    )
+st.caption("After downloading, unzip and load via chrome://extensions in Developer Mode.")
