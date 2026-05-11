@@ -4,22 +4,28 @@ import json
 import os
 from datetime import datetime
 
-# --- CONFIG ---
-st.set_page_config(page_title="Smart Cart Planner", page_icon="🛒", layout="wide")
+# --- 1. INITIAL PAGE CONFIG ---
+st.set_page_config(
+    page_title="Smart Cart Planner", 
+    page_icon="🛍️", 
+    layout="wide"
+)
 
-# --- TYPO-PROOFING FOR GITHUB ---
-# This looks for your zip file even if it's named 'extenison.zip' on GitHub
-ZIP_PATH = "extenison.zip" if os.path.exists("extenison.zip") else "extension.zip"
+# --- 2. THE TYPO-FIXER ---
+# This checks for both 'extension.zip' and your GitHub typo 'extenison.zip'
+# This prevents the "FileNotFoundError" you were seeing.
+ZIP_FILE_NAME = "extenison.zip" if os.path.exists("extenison.zip") else "extension.zip"
 
-# --- STYLING ---
+# --- 3. CUSTOM STYLING (CSS) ---
 st.markdown("""
     <style>
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #ff4b4b; color: white; }
-    .main { background-color: #f5f7f9; }
+    .stButton>button { width: 100%; border-radius: 8px; height: 3em; background-color: #ff4b4b; color: white; font-weight: bold; }
+    .main { background-color: #f8f9fa; }
+    div[data-testid="stMetricValue"] { color: #ff4b4b; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- LOGIC FUNCTIONS ---
+# --- 4. ANALYTICS LOGIC ---
 def get_current_season():
     month = datetime.now().month
     if 3 <= month <= 6: return "Summer"
@@ -27,87 +33,100 @@ def get_current_season():
     if 10 <= month <= 11: return "Autumn"
     return "Winter"
 
-def detect_season(name):
+def analyze_item_season(name):
     name = str(name).lower()
-    winter_words = ['sweater', 'jacket', 'wool', 'hoodie', 'coat', 'blanket', 'heater', 'winter']
-    summer_words = ['t-shirt', 'shorts', 'ac', 'cooler', 'sunscreen', 'cotton', 'fan', 'summer']
-    if any(w in name for w in winter_words): return "Winter"
-    if any(w in name for w in summer_words): return "Summer"
-    return "All"
+    winter_keywords = ['jacket', 'sweater', 'hoodie', 'wool', 'coat', 'blanket', 'heater', 'boots']
+    summer_keywords = ['t-shirt', 'shorts', 'ac', 'cooler', 'cotton', 'fan', 'sandals', 'sunscreen']
+    
+    if any(word in name for word in winter_keywords): return "Winter"
+    if any(word in name for word in summer_keywords): return "Summer"
+    return "All-Season"
 
-# --- SIDEBAR: SETTINGS ---
+# --- 5. SIDEBAR ---
 st.sidebar.header("⚙️ Budget Settings")
-budget = st.sidebar.number_input("Set Your Monthly Budget (₹)", min_value=0, value=5000, step=500)
-st.sidebar.info(f"System Season: **{get_current_season()}**")
+user_budget = st.sidebar.number_input("Enter Monthly Budget (₹)", min_value=0, value=5000, step=500)
+st.sidebar.info(f"Current System Season: **{get_current_season()}**")
 
-# --- MAIN UI ---
+# --- 6. MAIN INTERFACE ---
 st.title("🛍️ Smart Shopping Plan")
+st.write("Optimize your cart based on priority, budget, and season.")
 
-# STEP 1: Extension Download for New Users
-with st.expander("🚀 First time? Download the Chrome Extension"):
-    st.write("To scan your cart automatically, you need our helper tool:")
-    if os.path.exists(ZIP_PATH):
-        with open(ZIP_PATH, "rb") as f:
+# Extension Download Section
+with st.expander("📥 First time here? Install the Chrome Extension"):
+    st.write("To pull items automatically from Amazon/Myntra, download this tool:")
+    if os.path.exists(ZIP_FILE_NAME):
+        with open(ZIP_FILE_NAME, "rb") as f:
             st.download_button(
-                label="📥 Download Extension Zip",
+                label="Download Extension Zip",
                 data=f,
                 file_name="smart_cart_extension.zip",
                 mime="application/zip"
             )
-        st.info("How to install: Unzip the file -> Go to `chrome://extensions` -> Enable 'Developer Mode' -> 'Load Unpacked' -> Select the folder.")
+        st.caption("Steps: Unzip -> chrome://extensions -> Developer Mode -> Load Unpacked.")
     else:
-        st.error(f"File not found on GitHub. Please ensure '{ZIP_PATH}' is in your repository.")
+        st.error(f"Critical Error: Zip file not found in repository. Please upload {ZIP_FILE_NAME}.")
 
-# STEP 2: Data Handling
+# --- 7. DATA PROCESSING ---
 query_params = st.query_params
-cart_items = []
 
 if "cart_data" in query_params:
     try:
-        # Capture data sent from the extension
-        cart_items = json.loads(query_params["cart_data"])
-        st.success(f"✅ Captured {len(cart_items)} items from your browser!")
-    except Exception as e:
-        st.error("Error reading extension data. Please try scanning again.")
-else:
-    st.divider()
-    st.info("👋 Open your Amazon/Myntra cart and click the extension button to see your results here!")
-
-# STEP 3: Analysis and Display
-if cart_items:
-    current_season = get_current_season()
-    buy, wait = [], []
-    
-    # Process items
-    sorted_items = sorted(cart_items, key=lambda x: float(str(x['price']).replace(',', '')))
-    remaining = budget
-    
-    for item in sorted_items:
-        price = float(str(item['price']).replace(',', ''))
-        season = detect_season(item['name'])
+        # Decode data from Extension
+        raw_data = json.loads(query_params["cart_data"])
+        df = pd.DataFrame(raw_data)
         
-        if price <= remaining and (season == current_season or season == "All"):
-            buy.append(item)
-            remaining -= price
-        else:
-            item['reason'] = "Exceeds Budget" if price > remaining else f"Wait for {season}"
-            wait.append(item)
+        # Clean Prices (Removing commas if they exist)
+        df['price'] = df['price'].apply(lambda x: float(str(x).replace(',', '')))
+        
+        st.success(f"✅ Successfully captured {len(df)} items!")
 
-    # UI Columns
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("✅ Buy Now")
-        for item in buy:
-            with st.container(border=True):
-                st.write(f"**{item['name'][:50]}...**")
-                st.write(f"💰 ₹{item['price']}")
+        # Priority Sorting (Cheapest items first to maximize quantity)
+        df = df.sort_values(by='price')
+        
+        # Budget Analysis
+        current_balance = user_budget
+        buy_list = []
+        wait_list = []
+        
+        for _, item in df.iterrows():
+            item_season = analyze_item_season(item['name'])
+            current_sys_season = get_current_season()
+            
+            # Logic: Can we afford it AND is it the right season?
+            if item['price'] <= current_balance and (item_season == current_sys_season or item_season == "All-Season"):
+                buy_list.append(item)
+                current_balance -= item['price']
+            else:
+                reason = "Out of Budget" if item['price'] > current_balance else f"Wrong Season ({item_season})"
+                item_with_reason = item.to_dict()
+                item_with_reason['reason'] = reason
+                wait_list.append(item_with_reason)
 
-    with col2:
-        st.subheader("⏳ Wait for Later")
-        for item in wait:
-            with st.expander(f"{item['name'][:30]}..."):
-                st.write(f"**Price:** ₹{item['price']}")
-                st.write(f"**Advice:** {item.get('reason', 'Check season')}")
+        # Display Results
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("✅ Recommended to Buy")
+            if buy_list:
+                for item in buy_list:
+                    with st.container(border=True):
+                        st.write(f"**{item['name']}**")
+                        st.write(f"₹{item['price']}")
+            else:
+                st.write("No items fit the current budget/season.")
 
-    st.divider()
-    st.metric("Remaining Balance", f"₹{remaining}")
+        with col2:
+            st.subheader("⏳ Save for Later")
+            if wait_list:
+                for item in wait_list:
+                    with st.expander(f"{item['name'][:40]}..."):
+                        st.write(f"Price: ₹{item['price']}")
+                        st.write(f"Reason: {item['reason']}")
+
+        st.divider()
+        st.metric("Remaining Balance", f"₹{current_balance}")
+
+    except Exception as e:
+        st.error(f"Error processing cart: {e}")
+else:
+    st.info("👋 Open your Amazon Cart and click the 'Analyze' extension button to begin!")
