@@ -2,41 +2,52 @@ import streamlit as st
 import pandas as pd
 import json
 import os
-from datetime import datetime
 
-st.set_page_config(page_title="Smart Cart Planner", page_icon="🛒")
+st.set_page_config(page_title="Smart Cart Planner", page_icon="🛒", layout="wide")
 
-# --- FILE PATH FIX ---
-# This looks for your file regardless of the typo on GitHub
-ZIP_PATH = "extenison.zip" if os.path.exists("extenison.zip") else "extension.zip"
+# --- TYPO PROOFING ---
+# This looks for your file even if it's named 'extenison.zip' on GitHub
+ZIP_FILE = "extenison.zip" if os.path.exists("extenison.zip") else "extension.zip"
 
-st.title("🛍️ Your Smart Shopping Plan")
+st.title("🛍️ Smart Shopping Plan")
 
-# Extension Download Section
-with st.expander("🚀 Install the Tool"):
-    if os.path.exists(ZIP_PATH):
-        with open(ZIP_PATH, "rb") as f:
-            st.download_button("📥 Download Extension Zip", f, file_name="smart_cart_extension.zip")
-        st.write("Extract the zip, go to `chrome://extensions`, enable 'Developer Mode', and 'Load Unpacked'.")
+# Extension Download Sidebar
+with st.sidebar:
+    st.header("Install Tool")
+    if os.path.exists(ZIP_FILE):
+        with open(ZIP_FILE, "rb") as f:
+            st.download_button("📥 Download Extension", f, file_name="smart_cart.zip")
     else:
-        st.error(f"Error: Neither 'extension.zip' nor 'extenison.zip' was found in your GitHub repo.")
+        st.error("Extension file missing on GitHub!")
+    
+    st.divider()
+    budget = st.number_input("Monthly Budget (₹)", value=5000, step=500)
 
-# Data Handling
-query_params = st.query_params
-if "cart_data" in query_params:
+# Data Processing
+params = st.query_params
+if "cart_data" in params:
     try:
-        data = json.loads(query_params["cart_data"])
-        st.success(f"Successfully loaded {len(data)} items!")
-        df = pd.DataFrame(data)
-        st.table(df)
+        items = json.loads(params["cart_data"])
+        df = pd.DataFrame(items)
         
-        budget = st.number_input("Enter your Budget (₹)", value=5000)
-        total = df['price'].sum()
-        st.metric("Total Cart Value", f"₹{total}")
+        st.success(f"Captured {len(df)} items!")
         
-        if total > budget:
-            st.warning(f"You are ₹{total - budget} over budget!")
+        # Display Results
+        col1, col2 = st.columns(2)
+        total_price = df['price'].sum()
+        
+        with col1:
+            st.subheader("Your Items")
+            st.dataframe(df[['name', 'price']], use_container_width=True)
+            
+        with col2:
+            st.metric("Total Value", f"₹{total_price}")
+            if total_price > budget:
+                st.error(f"You are ₹{total_price - budget} over budget!")
+            else:
+                st.success("You are within budget!")
+                
     except Exception as e:
-        st.error("Failed to parse data.")
+        st.error("Data error. Try clicking the extension again.")
 else:
-    st.info("👋 Open your Amazon cart and click the extension to start!")
+    st.info("👋 Open your Amazon Cart and click the 'Smart Cart' extension to begin!")
