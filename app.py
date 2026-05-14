@@ -19,8 +19,8 @@ st.markdown("""
 # --- AUTO-SEASON LOGIC ---
 def detect_season_from_name(name):
     name = name.lower()
-    winter_words = ['sweater', 'jacket', 'wool', 'hoodie', 'coat', 'blanket', 'heater', 'muffler', 'gloves', 'boots']
-    summer_words = ['t-shirt', 'shorts', 'ac', 'cooler', 'sunscreen', 'sleeveless', 'cotton', 'fan', 'sunglasses', 'sandals']
+    winter_words = ['sweater', 'jacket', 'wool', 'hoodie', 'coat', 'blanket', 'heater', 'muffler', 'gloves', 'boots', 'thermal']
+    summer_words = ['t-shirt', 'shorts', 'ac', 'cooler', 'sunscreen', 'sleeveless', 'cotton', 'fan', 'sunglasses', 'sandals', 'vest']
     
     if any(word in name for word in winter_words): return "Winter"
     if any(word in name for word in summer_words): return "Summer"
@@ -37,17 +37,24 @@ def get_current_season():
 def analyze_cart(items, budget):
     current_season = get_current_season()
     buy, wait = [], []
-    # Sort items by price (cheapest first) to maximize number of items bought
-    items = sorted(items, key=lambda x: x['price'])
+    
+    # Sort items by price (cheapest first)
+    items = sorted(items, key=lambda x: x.get('price', 0))
     
     rem_budget = budget
     for item in items:
+        # Ensure price is a float
+        try:
+            price = float(item['price'])
+        except:
+            continue
+
         item_season = detect_season_from_name(item['name'])
         
-        if item['price'] <= rem_budget:
+        if price <= rem_budget:
             if item_season == current_season or item_season == "All":
                 buy.append(item)
-                rem_budget -= item['price']
+                rem_budget -= price
             else:
                 item['reason'] = f"Wrong Season ({item_season} item in {current_season})"
                 wait.append(item)
@@ -66,11 +73,10 @@ st.sidebar.divider()
 st.title("🛍️ Smart Shopping Plan")
 st.write(f"Current System Season: **{get_current_season()}**")
 
-# --- STEP 1: DOWNLOAD EXTENSION (FOR PUBLIC USERS) ---
+# --- STEP 1: DOWNLOAD EXTENSION ---
 with st.expander("🚀 New User? Download the Chrome Extension Tool"):
     st.write("To analyze your cart automatically, you need our helper tool:")
-    # Handling the typo in your filename dynamically
-    zip_path = "extenison.zip" if os.path.exists("extenison.zip") else "extension.zip"
+    zip_path = "extension.zip" if os.path.exists("extension.zip") else "extenison.zip"
     
     if os.path.exists(zip_path):
         with open(zip_path, "rb") as fp:
@@ -80,29 +86,31 @@ with st.expander("🚀 New User? Download the Chrome Extension Tool"):
                 file_name="smart-cart-extension.zip",
                 mime="application/zip"
             )
-        st.info("**How to install:** Unzip the folder -> Go to `chrome://extensions` -> Enable 'Developer Mode' -> Click 'Load Unpacked' -> Select the folder.")
     else:
-        st.error("Extension file not found on server. Please upload 'extension.zip' to GitHub.")
+        st.error("Extension file not found on server.")
 
-# --- STEP 2: DATA HANDLING (URL OR UPLOAD) ---
-query_params = st.query_params
+# --- STEP 2: DATA HANDLING (URL DATA) ---
 cart_items = []
 
-if "cart_data" in query_params:
+# New Streamlit 1.30+ Query Param handling
+if "cart_data" in st.query_params:
     try:
-        cart_items = json.loads(query_params["cart_data"])
-        st.success(f"✅ Successfully captured {len(cart_items)} items from your cart!")
-    except:
-        st.error("Could not read extension data. Please try again.")
+        raw_data = st.query_params["cart_data"]
+        cart_items = json.loads(raw_data)
+        if cart_items:
+            st.success(f"✅ Successfully captured {len(cart_items)} items from your cart!")
+    except Exception as e:
+        st.error(f"Error reading extension data: {e}")
 else:
     st.divider()
-    st.info("👋 Open your Amazon/Myntra cart and click the extension button to see your results here!")
-    # Optional Manual Upload for backup
-    with st.expander("Or upload a CSV manually"):
-        uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
-        if uploaded_file is not None:
-            df = pd.read_csv(uploaded_file)
-            cart_items = df.to_dict('records')
+    st.info("👋 Open Amazon/Myntra/Flipkart cart and click the extension button!")
+
+# Manual CSV Fallback
+with st.expander("Or upload a CSV manually"):
+    uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        cart_items = df.to_dict('records')
 
 # --- STEP 3: DISPLAY RESULTS ---
 if cart_items:
@@ -123,9 +131,9 @@ if cart_items:
         for item in wait_list:
             with st.expander(f"{item['name']} (₹{item['price']})"):
                 st.write(f"**Reason:** {item['reason']}")
-                st.write("💡 Tip: Try buying this when you have more budget or during its prime season.")
+                st.write("💡 Tip: Wait for the correct season or a higher budget.")
                 
     st.divider()
-    st.metric("Total Left in Budget", f"₹{balance}")
-    if balance < 100:
-        st.warning("You have almost reached your budget limit!")
+    st.metric("Total Left in Budget", f"₹{round(balance, 2)}")
+    if balance < 100 and budget > 0:
+        st.warning("You have reached your budget limit!")
