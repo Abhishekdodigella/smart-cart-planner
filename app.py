@@ -7,7 +7,6 @@ import os
 # --- CONFIG ---
 st.set_page_config(page_title="Smart Cart Planner", page_icon="🛒", layout="wide")
 
-# --- CSS FOR STYLING ---
 st.markdown("""
     <style>
     .main { background-color: #f5f7f9; }
@@ -16,7 +15,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- AUTO-SEASON LOGIC ---
+# --- LOGIC ---
 def detect_season_from_name(name):
     name = name.lower()
     winter_words = ['sweater', 'jacket', 'wool', 'hoodie', 'coat', 'blanket', 'heater', 'muffler', 'gloves', 'boots', 'thermal']
@@ -33,17 +32,13 @@ def get_current_season():
     if 10 <= month <= 11: return "Autumn"
     return "Winter"
 
-# --- MAIN ANALYSIS ENGINE ---
 def analyze_cart(items, budget):
     current_season = get_current_season()
     buy, wait = [], []
-    
-    # Sort items by price (cheapest first)
     items = sorted(items, key=lambda x: x.get('price', 0))
     
     rem_budget = budget
     for item in items:
-        # Ensure price is a float
         try:
             price = float(item['price'])
         except:
@@ -64,60 +59,31 @@ def analyze_cart(items, budget):
             
     return buy, wait, rem_budget
 
-# --- SIDEBAR: SETTINGS ---
+# --- UI ---
 st.sidebar.header("⚙️ Settings")
 budget = st.sidebar.number_input("Your Monthly Budget (₹)", min_value=0, value=5000, step=500)
-st.sidebar.divider()
 
-# --- HEADER ---
 st.title("🛍️ Smart Shopping Plan")
 st.write(f"Current System Season: **{get_current_season()}**")
 
-# --- STEP 1: DOWNLOAD EXTENSION ---
-with st.expander("🚀 New User? Download the Chrome Extension Tool"):
-    st.write("To analyze your cart automatically, you need our helper tool:")
-    zip_path = "extension.zip" if os.path.exists("extension.zip") else "extenison.zip"
-    
-    if os.path.exists(zip_path):
-        with open(zip_path, "rb") as fp:
-            st.download_button(
-                label="📥 Download Chrome Extension",
-                data=fp,
-                file_name="smart-cart-extension.zip",
-                mime="application/zip"
-            )
-    else:
-        st.error("Extension file not found on server.")
-
-# --- STEP 2: DATA HANDLING (URL DATA) ---
 cart_items = []
 
-# New Streamlit 1.30+ Query Param handling
+# Handshake with Extension
 if "cart_data" in st.query_params:
     try:
         raw_data = st.query_params["cart_data"]
         cart_items = json.loads(raw_data)
         if cart_items:
-            st.success(f"✅ Successfully captured {len(cart_items)} items from your cart!")
+            st.success(f"✅ Captured {len(cart_items)} items from your cart!")
     except Exception as e:
-        st.error(f"Error reading extension data: {e}")
+        st.error(f"Data Sync Error: {e}")
 else:
-    st.divider()
-    st.info("👋 Open Amazon/Myntra/Flipkart cart and click the extension button!")
+    st.info("👋 Open Amazon/Myntra/Flipkart and click the extension button!")
 
-# Manual CSV Fallback
-with st.expander("Or upload a CSV manually"):
-    uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
-        cart_items = df.to_dict('records')
-
-# --- STEP 3: DISPLAY RESULTS ---
 if cart_items:
     buy_list, wait_list, balance = analyze_cart(cart_items, budget)
     
     col1, col2 = st.columns(2)
-    
     with col1:
         st.subheader("✅ Buy These Now")
         for item in buy_list:
@@ -131,9 +97,6 @@ if cart_items:
         for item in wait_list:
             with st.expander(f"{item['name']} (₹{item['price']})"):
                 st.write(f"**Reason:** {item['reason']}")
-                st.write("💡 Tip: Wait for the correct season or a higher budget.")
-                
+    
     st.divider()
     st.metric("Total Left in Budget", f"₹{round(balance, 2)}")
-    if balance < 100 and budget > 0:
-        st.warning("You have reached your budget limit!")
